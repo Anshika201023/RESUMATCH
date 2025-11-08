@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ResuMatch</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { height:100vh; }
+    .sidebar { width: 260px; background:#0d6efd; color:white; height:100vh; padding: 20px; position:fixed; }
+    .content { margin-left:260px; padding:20px; }
+    #parsed-details { max-height: 60vh; overflow:auto; }
+    #history-list { max-height: 70vh; overflow:auto; }
+  </style>
+</head>
+<body>
+  <div class="sidebar">
+    <h4 class="mb-4">ResuMatch</h4>
+    <button id="btn-home" class="btn btn-light text-primary mb-2">Home</button>
+    <button id="btn-history" class="btn btn-light text-primary mb-2">History</button>
+    <hr style="border-color: rgba(255,255,255,0.2)">
+    <div class="text-white-50 small">Steps</div>
+    <ol class="text-white-50 small">
+      <li>Upload Resume</li>
+      <li>Enter Job Description</li>
+      <li>See Match</li>
+    </ol>
+  </div>
+
+  <div class="content">
+    <div id="home-screen">
+      <h3>Step 1: Upload Resume</h3>
+      <div class="row">
+        <div class="col-md-6">
+          <form id="upload-form">
+            <div class="mb-3">
+              <label class="form-label">Choose Resume (PDF / DOCX)</label>
+              <input class="form-control" type="file" id="resume-file" accept=".pdf,.docx" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Parse Resume</button>
+          </form>
+          <div id="upload-alert" class="mt-3"></div>
+        </div>
+
+        <div class="col-md-6">
+          <h5>Parsed Details</h5>
+          <div id="parsed-details" class="border p-3">
+            <p class="text-muted">Parsed resume details will appear here after upload.</p>
+          </div>
+        </div>
+      </div>
+
+      <hr>
+
+      <h3>Step 2: Enter Job Description</h3>
+      <div class="mb-2">
+        <input id="job-title" class="form-control" placeholder="Job Title (e.g., Software Engineer)">
+      </div>
+      <div class="mb-3">
+        <textarea id="job-desc" class="form-control" rows="6" placeholder="Paste job description here..."></textarea>
+      </div>
+      <button id="btn-match" class="btn btn-success">Match</button>
+
+      <hr>
+
+      <h3>Step 3: Results</h3>
+      <div id="match-results" class="border p-3">
+        <p class="text-muted">Matching results will appear here after clicking Match.</p>
+      </div>
+    </div>
+
+    <div id="history-screen" style="display:none;">
+      <h3>History</h3>
+      <div class="row">
+        <div class="col-md-5">
+          <h6>Parsed Resumes</h6>
+          <div id="history-list" class="list-group"></div>
+        </div>
+        <div class="col-md-7">
+          <h6>Match History</h6>
+          <div id="match-history" class="border p-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    const apiBase = "/api";
+    const uploadForm = document.getElementById("upload-form");
+    const resumeInput = document.getElementById("resume-file");
+    const parsedDetails = document.getElementById("parsed-details");
+    const uploadAlert = document.getElementById("upload-alert");
+    const jobTitle = document.getElementById("job-title");
+    const jobDesc = document.getElementById("job-desc");
+    const btnMatch = document.getElementById("btn-match");
+    const matchResults = document.getElementById("match-results");
+    const btnHistory = document.getElementById("btn-history");
+    const btnHome = document.getElementById("btn-home");
+    const homeScreen = document.getElementById("home-screen");
+    const historyScreen = document.getElementById("history-screen");
+    const historyList = document.getElementById("history-list");
+    const matchHistory = document.getElementById("match-history");
+
+    let latestParsed = null;
+
+    btnHistory.addEventListener("click", () => {
+      homeScreen.style.display = "none";
+      historyScreen.style.display = "block";
+      loadHistory();
+    });
+    btnHome.addEventListener("click", () => {
+      homeScreen.style.display = "block";
+      historyScreen.style.display = "none";
+    });
+
+    uploadForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (!resumeInput.files || resumeInput.files.length === 0) return;
+      const file = resumeInput.files[0];
+      const fd = new FormData();
+      fd.append("file", file);
+      uploadAlert.innerHTML = '<div class="spinner-border text-primary" role="status"></div> Parsing...';
+      try {
+        const res = await fetch(apiBase + "/parse", { method: "POST", body: fd });
+        const data = await res.json();
+        if (!res.ok) {
+          uploadAlert.innerHTML = `<div class="alert alert-danger">${data.error || "Parsing failed"}</div>`;
+          return;
+        }
+        uploadAlert.innerHTML = `<div class="alert alert-success">Parsed successfully</div>`;
+        latestParsed = data.parsed;
+        renderParsed(latestParsed);
+      } catch (err) {
+        uploadAlert.innerHTML = `<div class="alert alert-danger">Network error: ${err}</div>`;
+      }
+    });
+
+    function renderParsed(p) {
+      if (!p) {
+        parsedDetails.innerHTML = '<p class="text-muted">Parsed resume details will appear here after upload.</p>';
+        return;
+      }
+      const skills = (p.skills || []).map(s => `<span class="badge bg-secondary me-1">${s}</span>`).join(" ");
+      parsedDetails.innerHTML = `
+        <p><strong>${p.name || "—"}</strong></p>
+        <p><small>${p.email || ""} ${p.mobile_number ? "• " + p.mobile_number : ""}</small></p>
+        <p><strong>Degree:</strong> ${p.degree || "—"}</p>
+        <p><strong>Experience:</strong> ${p.total_experience || "—"}</p>
+        <p><strong>Skills:</strong><br/> ${skills}</p>
+      `;
+    }
+
+    btnMatch.addEventListener("click", async () => {
+      if (!latestParsed) {
+        alert("Please upload and parse a resume first.");
+        return;
+      }
+      const title = jobTitle.value || "";
+      const description = jobDesc.value || "";
+      const payload = {
+        resumeSkills: latestParsed.skills || [],
+        title,
+        description
+      };
+      matchResults.innerHTML = '<div class="spinner-border text-success" role="status"></div> Matching...';
+      try {
+        const res = await fetch(apiBase + "/match", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          matchResults.innerHTML = `<div class="alert alert-danger">${data.error || "Matching failed"}</div>`;
+          return;
+        }
+        renderMatch(data.result);
+      } catch (err) {
+        matchResults.innerHTML = `<div class="alert alert-danger">Network error: ${err}</div>`;
+      }
+    });
+
+    function renderMatch(r) {
+      if (!r) {
+        matchResults.innerHTML = `<p class="text-muted">No results</p>`;
+        return;
+      }
+      const matched = (r.matched || []).map(x => `<li>${x}</li>`).join("");
+      const missing = (r.missing || []).map(x => `<li>${x}</li>`).join("");
+      matchResults.innerHTML = `
+        <h5>${r.title || "Job"}</h5>
+        <p><strong>Match:</strong> ${r.match_percent}%</p>
+        <p><strong>Matched skills:</strong></p>
+        <ul>${matched || "<li>None</li>"}</ul>
+        <p><strong>Missing skills:</strong></p>
+        <ul>${missing || "<li>None</li>"}</ul>
+        <p><small class="text-muted">Saved to history: ${new Date(r.created_at).toLocaleString()}</small></p>
+      `;
+    }
+
+    async function loadHistory() {
+      historyList.innerHTML = '<div class="spinner-border text-light" role="status"></div>';
+      matchHistory.innerHTML = '';
+      try {
+        const res = await fetch(apiBase + "/history");
+        const data = await res.json();
+        historyList.innerHTML = '';
+        (data.resumes || []).forEach(r => {
+          const el = document.createElement("button");
+          el.className = "list-group-item list-group-item-action";
+          el.innerHTML = `<strong>${r.name || r.filename}</strong><br/><small>${r.email || ""} • ${new Date(r.parsed_at).toLocaleString()}</small>`;
+          el.onclick = () => {
+            const html = `
+              <p><strong>${r.name || "—"}</strong></p>
+              <p><small>${r.email || ""}</small></p>
+              <p><strong>Skills:</strong><br/> ${(r.skills || []).map(s=>`<span class="badge bg-secondary me-1">${s}</span>`).join(" ")}</p>
+            `;
+            matchHistory.innerHTML = html;
+          };
+          historyList.appendChild(el);
+        });
+
+        if ((data.matches || []).length === 0) {
+          matchHistory.innerHTML = '<p class="text-muted">No matches yet.</p>';
+        } else {
+          const html = (data.matches || []).map(m => {
+            return `<div class="mb-3 border p-2">
+              <div><strong>${m.title || "—"}</strong></div>
+              <div>Match: ${m.match_percent}%</div>
+              <div><small>${new Date(m.created_at).toLocaleString()}</small></div>
+            </div>`;
+          }).join("");
+          matchHistory.innerHTML = html;
+        }
+      } catch (err) {
+        historyList.innerHTML = `<div class="text-danger">Failed to load history: ${err}</div>`;
+      }
+    }
+
+    renderParsed(null);
+  </script>
+</body>
+</html>
