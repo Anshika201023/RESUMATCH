@@ -1,0 +1,12 @@
+Flask==2.2.5
+flask-cors==3.0.10
+nltk==3.8.1
+spacy==2.3.5
+pyresparser==1.0.6
+sentence-transformers==2.2.2
+huggingface_hub==0.8.1
+pdfminer.six==20221105
+python-docx==0.8.11
+torch==2.2.0+cpu
+pymongo==4.4.0
+gunicorn==20.1.0
